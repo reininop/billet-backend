@@ -1,54 +1,44 @@
 const express = require('express');
 const cors = require('cors');
-const { Pool } = require('pg');
-
 const app = express();
-const port = process.env.PORT || 3000;
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+const pool = require('./db'); // Assuming you're using pg and have this setup
 
 app.use(cors());
 app.use(express.json());
 
-// Get all heats
+// Fetch all heats
 app.get('/api/heats', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM heats ORDER BY created_at DESC');
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error fetching heats');
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Get logs for a heat
+// Fetch logs for a heat
 app.get('/api/heats/:heatId/logs', async (req, res) => {
+  const { heatId } = req.params;
   try {
-    const { heatId } = req.params;
-    const result = await pool.query('SELECT * FROM logs WHERE heat_id = $1 ORDER BY log_number ASC', [heatId]);
+    const result = await pool.query('SELECT * FROM logs WHERE heat_id = $1', [heatId]);
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error fetching logs');
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Get annotations for a log
+// Fetch annotations for a log
 app.get('/api/logs/:logId/annotations', async (req, res) => {
+  const { logId } = req.params;
   try {
-    const { logId } = req.params;
-    const result = await pool.query('SELECT * FROM annotations WHERE log_id = $1 ORDER BY position ASC', [logId]);
+    const result = await pool.query('SELECT * FROM annotations WHERE log_id = $1', [logId]);
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error fetching annotations');
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Add a new heat
+// Add new heat (for data entry mode)
 app.post('/api/heats', async (req, res) => {
   const { customer, alloy, diameter, length } = req.body;
   try {
@@ -58,43 +48,38 @@ app.post('/api/heats', async (req, res) => {
     );
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error adding heat');
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Add a new log to a heat
+// Add new log
 app.post('/api/logs', async (req, res) => {
-  const { heat_id, log_number, diameter } = req.body;
+  const { heat_id, log_number } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO logs (heat_id, log_number, diameter) VALUES ($1, $2, $3) RETURNING *',
-      [heat_id, log_number, diameter]
+      'INSERT INTO logs (heat_id, log_number) VALUES ($1, $2) RETURNING *',
+      [heat_id, log_number]
     );
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error adding log');
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Add or update an annotation
+// Add new annotation
 app.post('/api/logs/:logId/annotations', async (req, res) => {
   const { logId } = req.params;
-  const { type, position, depth, hash, comment, inspector } = req.body;
+  const { type, position, note } = req.body;
   try {
     const result = await pool.query(
-      `INSERT INTO annotations (log_id, type, position, depth, hash, comment, inspector)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [logId, type, position, depth, hash, comment, inspector]
+      'INSERT INTO annotations (log_id, type, position, note) VALUES ($1, $2, $3, $4) RETURNING *',
+      [logId, type, position, note]
     );
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error saving annotation');
+    res.status(500).json({ error: err.message });
   }
 });
 
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-});
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
