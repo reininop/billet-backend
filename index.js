@@ -3,67 +3,86 @@ const cors = require('cors');
 const { Pool } = require('pg');
 
 const app = express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 10000;
 
-// ✅ CORS setup to allow local dev and optional production frontend
-app.use(cors({
-  origin: ['http://localhost:5173', 'https://billet-frontend.onrender.com'],
-  credentials: true
-}));
-
-app.use(express.json());
-
-// ✅ PostgreSQL connection pool using DATABASE_URL from environment
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
-// ✅ GET all annotations for a given log
-app.get('/api/logs/:logId/annotations', async (req, res) => {
-  try {
-    const { logId } = req.params;
-    const result = await pool.query('SELECT * FROM annotations WHERE log_id = $1', [logId]);
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Error fetching annotations:', err);
-    res.status(500).json({ error: 'Failed to fetch annotations' });
-  }
-});
+app.use(cors());
+app.use(express.json());
 
-// ✅ POST a new annotation
-app.post('/api/annotations', async (req, res) => {
+// Create a new heat
+app.post('/api/heats', async (req, res) => {
+  const { customer, alloy, diameter, length } = req.body;
   try {
-    const { log_id, type, position, depth, hash, comment, inspector } = req.body;
     const result = await pool.query(
-      `INSERT INTO annotations (log_id, type, position, depth, hash, comment, inspector)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [log_id, type, position, depth, hash, comment, inspector]
+      'INSERT INTO heats (customer, alloy, diameter, length) VALUES ($1, $2, $3, $4) RETURNING *',
+      [customer, alloy, diameter, length]
     );
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('Error inserting annotation:', err);
-    res.status(500).json({ error: 'Failed to insert annotation' });
+    console.error(err);
+    res.status(500).send('Error creating heat');
   }
 });
 
-// ✅ DELETE an annotation by ID
-app.delete('/api/annotations/:id', async (req, res) => {
+// Get all heats (for analysis dropdown)
+app.get('/api/heats', async (req, res) => {
   try {
-    await pool.query('DELETE FROM annotations WHERE id = $1', [req.params.id]);
-    res.sendStatus(204);
+    const result = await pool.query('SELECT * FROM heats ORDER BY created_at DESC');
+    res.json(result.rows);
   } catch (err) {
-    console.error('Error deleting annotation:', err);
-    res.status(500).json({ error: 'Failed to delete annotation' });
+    console.error(err);
+    res.status(500).send('Error fetching heats');
   }
 });
 
-// ✅ Health check endpoint
-app.get('/', (req, res) => {
-  res.send('Billet backend is running');
+// Get logs for a specific heat
+app.get('/api/heats/:heatId/logs', async (req, res) => {
+  const { heatId } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM logs WHERE heat_id = $1', [heatId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error fetching logs');
+  }
+});
+
+// Get annotations for a specific log
+app.get('/api/logs/:logId/annotations', async (req, res) => {
+  const { logId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM annotations WHERE log_id = $1 ORDER BY position',
+      [logId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error fetching annotations');
+  }
+});
+
+// Save an annotation
+app.post('/api/logs/:logId/annotations', async (req, res) => {
+  const { logId } = req.params;
+  const { type, position, depth, hash, comment, inspector } = req.body;
+  try {
+    const result = await pool.query(
+      `INSERT INTO annotations (log_id, type, position, depth, hash, comment, inspector)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [logId, type, position, depth, hash, comment, inspector]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error saving annotation');
+  }
 });
 
 app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
+  console.log(`Server running on port ${port}`);
 });
