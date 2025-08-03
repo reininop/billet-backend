@@ -1,85 +1,116 @@
-const express = require('express');
-const cors = require('cors');
+import express from "express";
+import cors from "cors";
+import pkg from "pg";
+
+const { Pool } = pkg;
 const app = express();
-const pool = require('./db'); // Assuming you're using pg and have this setup
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
 
-// Fetch all heats
-app.get('/api/heats', async (req, res) => {
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
+
+app.get("/api/heats", async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM heats ORDER BY created_at DESC');
+    const result = await pool.query("SELECT * FROM heats ORDER BY id DESC");
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("Error fetching heats:", err);
+    res.status(500).send("Internal Server Error");
   }
 });
 
-// Fetch logs for a heat
-app.get('/api/heats/:heatId/logs', async (req, res) => {
-  const { heatId } = req.params;
+app.get("/api/heats/:heatId/logs", async (req, res) => {
+  const heatId = req.params.heatId;
   try {
-    const result = await pool.query('SELECT * FROM logs WHERE heat_id = $1', [heatId]);
-    res.json(result.rows);
+    const result = await pool.query("SELECT * FROM logs WHERE heat_id = $1", [heatId]);
+    const logsWithAnnotations = await Promise.all(result.rows.map(async log => {
+      const annotationsResult = await pool.query("SELECT * FROM annotations WHERE log_id = $1", [log.id]);
+      return { ...log, annotations: annotationsResult.rows };
+    }));
+    res.json(logsWithAnnotations);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("Error fetching logs:", err);
+    res.status(500).send("Internal Server Error");
   }
 });
 
-// Fetch annotations for a log
-app.get('/api/logs/:logId/annotations', async (req, res) => {
-  const { logId } = req.params;
+app.post("/api/heats/:heatId/logs", async (req, res) => {
+  const heatId = req.params.heatId;
+  const log = req.body;
+  const logId = `${heatId}-${log.logNumber}`; // new composite ID scheme
+
   try {
-    const result = await pool.query('SELECT * FROM annotations WHERE log_id = $1', [logId]);
-    res.json(result.rows);
+    const existingLog = await pool.query("SELECT id FROM logs WHERE id = $1", [logId]);
+
+    if (existingLog.rows.length === 0) {
+      await pool.query(
+        "INSERT INTO logs (id, heat_id, log_number, name, finished_length, finished_diameter) VALUES ($1, $2, $3, $4, $5, $6)",
+        [logId, heatId, log.logNumber, log.name, log.finishedLength, log.finishedDiameter]
+      );
+    } else {
+      await pool.query(
+        "UPDATE logs SET log_number = $1, name = $2, finished_length = $3, finished_diameter = $4 WHERE id = $5",
+        [log.logNumber, log.name, log.finishedLength, log.finishedDiameter, logId]
+      );
+    }
+
+    await pool.query("DELETE FROM annotations WHERE log_id = $1", [logId]);
+
+    for (const annotation of log.annotations) {
+      await pool.query(
+        "INSERT INTO annotations (log_id, position, type, note, user_name, user_role, user_color) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        [logId, annotation.position, annotation.type, annotation.note, annotation.user?.name, annotation.user?.role, annotation.user?.color]
+      );
+    }
+
+    res.send("saved");
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("Error saving log and annotations:", err);
+    res.status(500).send("Internal Server Error");
   }
 });
 
-// Add new heat (for data entry mode)
-app.post('/api/heats', async (req, res) => {
-  const { customer, alloy, diameter, length } = req.body;
+app.get("/api/heats/:heatNumber", async (req, res) => {
+  const { heatNumber } = req.params;
+
   try {
-    const result = await pool.query(
-      'INSERT INTO heats (customer, alloy, diameter, length) VALUES ($1, $2, $3, $4) RETURNING *',
-      [customer, alloy, diameter, length]
+    const heatResult = await pool.query("SELECT * FROM heats WHERE heat_number = $1", [heatNumber]);
+
+    if (heatResult.rows.length === 0) {
+      return res.status(404).json(null);
+    }
+
+    const heat = heatResult.rows[0];
+
+    const logsResult = await pool.query(
+      "SELECT * FROM logs WHERE heat_id = $1 ORDER BY log_number",
+      [heat.id]
     );
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
-// Add new log
-app.post('/api/logs', async (req, res) => {
-  const { heat_id, log_number } = req.body;
-  try {
-    const result = await pool.query(
-      'INSERT INTO logs (heat_id, log_number) VALUES ($1, $2) RETURNING *',
-      [heat_id, log_number]
+    const logs = await Promise.all(
+      logsResult.rows.map(async (log) => {
+        const annotationsResult = await pool.query(
+          "SELECT * FROM annotations WHERE log_id = $1 ORDER BY position",
+          [log.id]
+        );
+        return { ...log, annotations: annotationsResult.rows };
+      })
     );
-    res.json(result.rows[0]);
+
+    res.json({ ...heat, logs });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("Error fetching heat:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// Add new annotation
-app.post('/api/logs/:logId/annotations', async (req, res) => {
-  const { logId } = req.params;
-  const { type, position, note } = req.body;
-  try {
-    const result = await pool.query(
-      'INSERT INTO annotations (log_id, type, position, note) VALUES ($1, $2, $3, $4) RETURNING *',
-      [logId, type, position, note]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
