@@ -98,6 +98,10 @@ app.post("/api/heats/:heatId/logs", async (req, res) => {
 app.get("/api/heats/:heatNumber", async (req, res) => {
   const { heatNumber } = req.params;
 
+  if (!/^A\d{7}$/.test(heatNumber)) {
+    return res.status(400).json({ error: "Invalid heat number format. Must be 'A' followed by 7 digits." });
+  }
+
   try {
     const heatResult = await pool.query("SELECT * FROM heats WHERE heat_number = $1", [heatNumber]);
 
