@@ -102,7 +102,7 @@ app.put("/api/heats/:heat_number/logs/:log_id", async (req, res) => {
         [
           log_id,
           heat_number,
-          log.logNumber,
+          log.log_number,
           log.optional_name || '',
           log.diameter || null,
           log.length || null,
@@ -119,7 +119,7 @@ app.put("/api/heats/:heat_number/logs/:log_id", async (req, res) => {
          unit = $5, transducer = $6, calibration = $7, gain = $8, prf = $9
          WHERE id = $10`,
         [
-          log.logNumber,
+          log.log_number,
           log.optional_name || '',
           log.diameter || null,
           log.length || null,
@@ -133,22 +133,18 @@ app.put("/api/heats/:heat_number/logs/:log_id", async (req, res) => {
       );
     }
 
-    // Annotations
     await pool.query("DELETE FROM annotations WHERE log_id = $1", [log_id]);
 
-    for (const annotation of log.annotations) {
+    for (const annotation of log.annotations || []) {
       await pool.query(
-        `INSERT INTO annotations (log_id, position, type, comment, depth, hash, inspector, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        `INSERT INTO annotations (log_id, position, type, comments, hash)
+         VALUES ($1, $2, $3, $4, $5)`,
         [
           log_id,
           annotation.position,
           annotation.type,
-          annotation.comment || null,
-          annotation.depth || null,
-          annotation.hash || null,
-          annotation.inspector || null,
-          annotation.createdBy ? JSON.stringify(annotation.createdBy) : null
+          annotation.comments || null,
+          annotation.hash || null
         ]
       );
     }
