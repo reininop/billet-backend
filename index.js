@@ -27,6 +27,10 @@ app.get("/api/heats", async (req, res) => {
 app.post("/api/heats", async (req, res) => {
   const { heat_number, customer, alloy, diameter, length } = req.body;
 
+  if (!/^A\d{7}$/.test(heat_number)) {
+    return res.status(400).json({ error: "Invalid heat number format. Must be 'A' followed by 7 digits." });
+  }
+
   try {
     const insertResult = await pool.query(
       "INSERT INTO heats (heat_number, customer, alloy, diameter, length) VALUES ($1, $2, $3, $4, $5) RETURNING *",
