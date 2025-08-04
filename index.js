@@ -154,14 +154,17 @@ app.put("/api/heats/:heat_number/logs/:log_id", async (req, res) => {
 
     for (const annotation of log.annotations || []) {
       await pool.query(
-        `INSERT INTO annotations (log_id, position, type, comments, hash)
-         VALUES ($1, $2, $3, $4, $5)`,
+        `INSERT INTO annotations (log_id, position, type, comment, hash, depth, created_by, inspector)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           log_id,
           annotation.position,
           annotation.type,
-          annotation.comments || null,
-          annotation.hash || null
+          annotation.comment || null,
+          annotation.hash || null,
+          annotation.depth || null,
+          annotation.created_by || null,
+          annotation.inspector || null
         ]
       );
     }
