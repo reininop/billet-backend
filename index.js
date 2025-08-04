@@ -1,8 +1,6 @@
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
-
-
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -26,6 +24,22 @@ app.get("/api/heats", async (req, res) => {
   }
 });
 
+app.post("/api/heats", async (req, res) => {
+  const { heat_number, customer, alloy, diameter, length } = req.body;
+
+  try {
+    const insertResult = await pool.query(
+      "INSERT INTO heats (heat_number, customer, alloy, diameter, length) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      [heat_number, customer || '', alloy || '', diameter || null, length || null]
+    );
+
+    res.status(201).json(insertResult.rows[0]);
+  } catch (err) {
+    console.error("Error creating new heat:", err);
+    res.status(500).json({ error: "Failed to create heat" });
+  }
+});
+
 app.get("/api/heats/:heatId/logs", async (req, res) => {
   const heatId = req.params.heatId;
   try {
@@ -44,7 +58,7 @@ app.get("/api/heats/:heatId/logs", async (req, res) => {
 app.post("/api/heats/:heatId/logs", async (req, res) => {
   const heatId = req.params.heatId;
   const log = req.body;
-  const logId = `${heatId}-${log.logNumber}`; // new composite ID scheme
+  const logId = `${heatId}-${log.logNumber}`;
 
   try {
     const existingLog = await pool.query("SELECT id FROM logs WHERE id = $1", [logId]);
@@ -84,7 +98,7 @@ app.get("/api/heats/:heatNumber", async (req, res) => {
     const heatResult = await pool.query("SELECT * FROM heats WHERE heat_number = $1", [heatNumber]);
 
     if (heatResult.rows.length === 0) {
-      return res.status(404).json(null);
+      return res.status(404).json({ error: "Heat not found" });
     }
 
     const heat = heatResult.rows[0];
