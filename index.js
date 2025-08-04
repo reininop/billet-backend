@@ -43,6 +43,23 @@ app.post("/api/heats", async (req, res) => {
   }
 });
 
+// PUT update existing heat
+app.put("/api/heats/:heat_number", async (req, res) => {
+  const { heat_number } = req.params;
+  const { customer, alloy, diameter, length } = req.body;
+
+  try {
+    await pool.query(
+      `UPDATE heats SET customer = $1, alloy = $2, diameter = $3, length = $4 WHERE heat_number = $5`,
+      [customer || '', alloy || '', diameter || null, length || null, heat_number]
+    );
+    res.status(200).json({ message: "Heat updated" });
+  } catch (err) {
+    console.error("Error updating heat:", err);
+    res.status(500).json({ error: "Failed to update heat" });
+  }
+});
+
 // GET full heat object (heat + logs + annotations)
 app.get("/api/heats/:heat_number", async (req, res) => {
   const { heat_number } = req.params;
