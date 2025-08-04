@@ -33,7 +33,7 @@ app.post("/api/heats", async (req, res) => {
 
   try {
     const insertResult = await pool.query(
-      "INSERT INTO heats (heat_number, customer, alloy, diameter, length) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      "INSERT INTO heats (heat_id, customer, alloy, diameter, length) VALUES ($1, $2, $3, $4, $5) RETURNING *",
       [heat_number, customer || '', alloy || '', diameter || null, length || null]
     );
 
@@ -103,7 +103,7 @@ app.get("/api/heats/:heatNumber", async (req, res) => {
   }
 
   try {
-    const heatResult = await pool.query("SELECT * FROM heats WHERE heat_number = $1", [heatNumber]);
+    const heatResult = await pool.query("SELECT * FROM heats WHERE heat_id = $1", [heatNumber]);
 
     if (heatResult.rows.length === 0) {
       return res.status(404).json({ error: "Heat not found" });
@@ -113,7 +113,7 @@ app.get("/api/heats/:heatNumber", async (req, res) => {
 
     const logsResult = await pool.query(
       "SELECT * FROM logs WHERE heat_id = $1 ORDER BY log_number",
-      [heat.id]
+      [heat.heat_id]
     );
 
     const logs = await Promise.all(
