@@ -12,7 +12,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Get all heats
+// GET all heats
 app.get("/api/heats", async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM heats ORDER BY id DESC");
@@ -23,7 +23,7 @@ app.get("/api/heats", async (req, res) => {
   }
 });
 
-// Create new heat
+// POST create new heat
 app.post("/api/heats", async (req, res) => {
   const { heat_number, customer, alloy, diameter, length } = req.body;
 
@@ -43,7 +43,7 @@ app.post("/api/heats", async (req, res) => {
   }
 });
 
-// Get heat by heat_number with logs and annotations
+// GET full heat object (heat + logs + annotations)
 app.get("/api/heats/:heat_number", async (req, res) => {
   const { heat_number } = req.params;
 
@@ -71,7 +71,7 @@ app.get("/api/heats/:heat_number", async (req, res) => {
   }
 });
 
-// Get logs for a heat
+// GET logs for heat_number
 app.get("/api/heats/:heat_number/logs", async (req, res) => {
   const { heat_number } = req.params;
   try {
@@ -87,7 +87,7 @@ app.get("/api/heats/:heat_number/logs", async (req, res) => {
   }
 });
 
-// Save or update a log and annotations
+// PUT (create/update) log and annotations
 app.put("/api/heats/:heat_number/logs/:log_id", async (req, res) => {
   const { heat_number, log_id } = req.params;
   const log = req.body;
@@ -97,16 +97,43 @@ app.put("/api/heats/:heat_number/logs/:log_id", async (req, res) => {
 
     if (existingLog.rows.length === 0) {
       await pool.query(
-        "INSERT INTO logs (id, heat_number, log_number, name, finished_length, finished_diameter) VALUES ($1, $2, $3, $4, $5, $6)",
-        [log_id, heat_number, log.logNumber, log.name, log.finishedLength, log.finishedDiameter]
+        `INSERT INTO logs (id, heat_number, log_number, optional_name, diameter, length, unit, transducer, calibration, gain, prf)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [
+          log_id,
+          heat_number,
+          log.logNumber,
+          log.optional_name || '',
+          log.diameter || null,
+          log.length || null,
+          log.unit || '',
+          log.transducer || '',
+          log.calibration || '',
+          log.gain || '',
+          log.prf || ''
+        ]
       );
     } else {
       await pool.query(
-        "UPDATE logs SET log_number = $1, name = $2, finished_length = $3, finished_diameter = $4 WHERE id = $5",
-        [log.logNumber, log.name, log.finishedLength, log.finishedDiameter, log_id]
+        `UPDATE logs SET log_number = $1, optional_name = $2, diameter = $3, length = $4,
+         unit = $5, transducer = $6, calibration = $7, gain = $8, prf = $9
+         WHERE id = $10`,
+        [
+          log.logNumber,
+          log.optional_name || '',
+          log.diameter || null,
+          log.length || null,
+          log.unit || '',
+          log.transducer || '',
+          log.calibration || '',
+          log.gain || '',
+          log.prf || '',
+          log_id
+        ]
       );
     }
 
+    // Annotations
     await pool.query("DELETE FROM annotations WHERE log_id = $1", [log_id]);
 
     for (const annotation of log.annotations) {
@@ -121,7 +148,7 @@ app.put("/api/heats/:heat_number/logs/:log_id", async (req, res) => {
           annotation.depth || null,
           annotation.hash || null,
           annotation.inspector || null,
-          JSON.stringify(annotation.createdBy || {})
+          annotation.createdBy ? JSON.stringify(annotation.createdBy) : null
         ]
       );
     }
