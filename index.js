@@ -152,21 +152,27 @@ app.put("/api/heats/:heat_number/logs/:log_id", async (req, res) => {
 
     await pool.query("DELETE FROM annotations WHERE log_id = $1", [log_id]);
 
+    console.log("Saving annotations:", log.annotations);
+
     for (const annotation of log.annotations || []) {
-      await pool.query(
-        `INSERT INTO annotations (log_id, position, type, comment, hash, depth, created_by, inspector)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [
-          log_id,
-          annotation.position,
-          annotation.type,
-          annotation.comment || null,
-          annotation.hash || null,
-          annotation.depth || null,
-          annotation.created_by || null,
-          annotation.inspector || null
-        ]
-      );
+      try {
+        await pool.query(
+          `INSERT INTO annotations (log_id, position, type, comment, hash, depth, created_by, inspector)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            log_id,
+            annotation.position,
+            annotation.type,
+            annotation.comment || null,
+            annotation.hash || null,
+            annotation.depth || null,
+            annotation.created_by || null,
+            annotation.inspector || null
+          ]
+        );
+      } catch (err) {
+        console.error("Failed to insert annotation:", annotation, err);
+      }
     }
 
     res.send("Saved");
