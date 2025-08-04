@@ -76,6 +76,7 @@ app.get("/api/heats/:heat_number", async (req, res) => {
 
     const logs = await Promise.all(
       logsResult.rows.map(async (log) => {
+        console.log("Fetching annotations for log_id:", log.id);
         const annotationsResult = await pool.query("SELECT * FROM annotations WHERE log_id = $1 ORDER BY position", [log.id]);
         return { ...log, annotations: annotationsResult.rows };
       })
